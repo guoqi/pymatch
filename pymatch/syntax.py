@@ -1,14 +1,9 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 #coding: utf-8
 
 import inspect
 import ast
-from pymatch.case import trait
-
-
-# represent any type
-@trait
-class _(object): pass
+from copy import deepcopy
 
 
 class TransformWith(ast.NodeTransformer):
@@ -16,7 +11,7 @@ class TransformWith(ast.NodeTransformer):
     transform with statement to a regular formal so that we create a syntax sugar for pattern matching
 
     e.g.
-    from syntax like belows:
+    transform from syntax like belows:
         with Match(a):
             with int:
                 <statement_1>
@@ -46,6 +41,7 @@ class TransformWith(ast.NodeTransformer):
         '''
         visit with-context statement
         '''
+        print node
         if not isinstance(node.context_expr, ast.Call):
             return node
         if not isinstance(node.context_expr.func, ast.Name):
@@ -61,38 +57,135 @@ class TransformWith(ast.NodeTransformer):
             if not isinstance(stmt, ast.With):
                 alter_body.append(stmt)
                 continue
+            alter_stmt = self.do_with_case(var_name, node.context_expr, stmt, pre_sub_with_stmts)
             if pre_sub_with_stmts is None:
-                alter_stmt = self.do_with_case(var_name, stmt, stmt.body)
+                pre_sub_with_stmts = [alter_stmt]
             else:
-                alter_stmt = self.do_with_case(var_name, stmt, pre_sub_with_stmts)
-            pre_sub_with_stmts.append(alter_stmt)
+                pre_sub_with_stmts.append(alter_stmt)
             alter_body.append(alter_stmt)
         node.body = alter_body
         return node
 
 
     def do_with_match(self, node):
-        return ast.Name(id="_sytax_sugar_tmp_var", ctx=ast.Store)
+        return ast.Name(id="_syntax_sugar_tmp_var", ctx=ast.Store())
 
 
-    def add_with_finally_stmt(self, body):
-        pass
-
-
-    def do_with_case(self, ctx_id, node, orelse):
+    def do_with_case(self, ctx_id, ctx_node, node, orelse):
         if not isinstance(node.context_expr, ast.Name):
             return node
-        if not inspect.isclass(node.context_expr) and node.context_expr.id != "_":
-            return node
+        if orelse is not None and node.context_expr.id == "_":
+            raise SyntaxError("any type identifier _ must be at the end of with-statement list")
+        # append the last match when it doesn't exist
+        if orelse is None and node.context_expr.id != "_":
+            orelse = [ast.Raise(
+                type=ast.Call(
+                    func=ast.Name(id="SyntaxError", ctx=ast.Load()), args=[ast.Str("match nothing!")], keywords=[], starargs=None, kwargs=None
+                ), 
+                inst=None, tback=None)
+            ]
         # convert to if-statement
-        if node.optional_vars is None:
-            return ast.If(
-                test = ast.Call(
-                    func=ast.Name(id="issubclass", ctx=ast.Load),
-                    args=[ast.Name(id=ctx_id, ctx=ast.Load), node.context_expr]
-                ),
-                body = node.body,
-                orelse = orelse
+        body = node.body[:]
+        if node.optional_vars is not None:
+            if isinstance(node.optional_vars, ast.Tuple):
+                total = len(node.optional_vars.elts)
+            elif isinstance(node.optional_vars, ast.Name):
+                total = 1
+            else:
+                raise SyntaxError("variable capture list must be variable (for only one variable) or tuple (for many variables)")
+            assert isinstance(ctx_node, ast.Call)
+            ctx_var = ctx_node.args[0].id
+            import_stmt = ast.ImportFrom(module="pymatch", names=[ast.alias("unpack", None)], level=0)
+            unpack_stmt = ast.Assign(
+                targets=list(node.optional_vars.elts), 
+                value=ast.Call(
+                    func=ast.Name(id="unpack", ctx=ast.Load()), 
+                    args=[ast.Name(id=ctx_var, ctx=ast.Load()), ast.Num(total)],
+                    keywords=[],
+                    starargs=None,
+                    kwargs=None
+                )
             )
-        else:
-            pass
+            body = [import_stmt, unpack_stmt] + body
+        return ast.If(
+            test = ast.Call(
+                func=ast.Name(id="issubclass", ctx=ast.Load()),
+                args=[ast.Name(id=ctx_id, ctx=ast.Load()), node.context_expr],
+                keywords=[],
+                starargs=None,
+                kwargs=None
+            ), 
+            body = body,
+            orelse = deepcopy(orelse)
+        )
+
+    
+class TransformFunctionDef(ast.NodeTransformer):
+    '''
+    remove specify decorates from function definition
+    '''
+    def visit_FunctionDef(self, node):
+        '''
+        visit function definition
+        '''
+        r = []
+        for decorator in node.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id == "match":
+                continue
+            r.append(decorator)
+        node.decorator_list = r
+        ast.fix_missing_locations(node)
+        return node
+
+    
+def align_indent(source):
+    '''
+    indent source code block so as to be used in local code block
+    '''
+    whitespaces = ['\t', ' ']
+    if source[0] not in whitespaces:
+        return source
+    indent_char = source[0]
+    def count_char(source, ch):
+        i = 0
+        while i < len(source) and source[i] == indent_char:
+            i += 1
+        return i
+    t = source.split("\n")
+    total = count_char(source, indent_char)
+    r = []
+    for item in t:
+        if item == '':
+            continue
+        cnt = count_char(item, indent_char)
+        if cnt < total:
+            raise IndentationError("unexpected indent")
+        r.append((cnt - total) * indent_char + item.lstrip())
+    return "\n".join(r)
+
+
+def chain_transform(tree, transformer_list=[]):
+    '''
+    transform ast in chains
+    '''
+    t = tree
+    for transformer_type in transformer_list:
+        transformer = transformer_type()
+        t = transformer.visit(t)
+    return t
+
+
+def match(func):
+    '''
+    Mark functions whose ast we need to rewrite for pattern matching
+    '''
+    print func.__name__
+    source = align_indent(inspect.getsource(func))
+    tree = ast.parse(source)
+    modified = chain_transform(tree, [TransformFunctionDef, TransformWith])
+    def wrap(*args, **kwargs):
+        from test import unparse
+        unparse.Unparser(modified)
+        exec compile(modified, __file__, 'exec') in globals()
+        func(*args, **kwargs)
+    return wrap
