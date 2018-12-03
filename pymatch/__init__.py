@@ -1,5 +1,5 @@
-#!/usr/local/bin/env python2
+#!/usr/bin/python2
 #coding: utf-8
-from match import Match
-from case import case, unpack
-from base import Object
+from pymatch.match import Match
+from pymatch.case import case, unpack, trait
+from pymatch.base import Object

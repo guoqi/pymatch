@@ -1,8 +1,18 @@
-#!/usr/local/env python2
+#!/usr/bin/python2
 #coding: utf-8
-from base import Object
 
-class Case(Object):
+from pymatch.base import Object
+
+
+class Trait(Object):
+    '''
+    Trait type cannot have any instances or objects
+    '''
+    def __init__(self):
+        raise TypeError("Trait type cannot be instantiated")
+
+
+class Case(Trait):
     '''
     Case class is available to unpack and pattern matching
 
@@ -34,14 +44,17 @@ class CaseIterator(Object):
         self.__reltype__ = reltype
         self.__cnt__ = 0
         self.__total__ = len(args)
-        self.__args__ = {}
+        self.__args__ = args
         self.__is_name_none__ = False
+        n = {}
         if names is None:
             self.__is_name_none__ = True
-            names = range(0, self.__total__)
-        # self.__args__ is a dict where key is argument of definition when names is not None otherwise number
-        for (n, a) in zip(names, args):
-            self.__args__[n] = a
+            for i in xrange(0, self.__total__):
+                n[i] = i
+        else:
+            for i in xrange(0, self.__total__):
+                n[names[i]] = i
+        self.__names__ = n
 
 
     @property
@@ -52,10 +65,7 @@ class CaseIterator(Object):
     def next(self):
         if self.__cnt__ >= self.__total__:
             raise StopIteration
-        if self.is_name_none:
-            item = self.__args__[self.__cnt__]
-        else:
-            item = self.__args__.iteritems()[self.__cnt__]
+        item = self.__args__[self.__cnt__]
         self.__cnt__ += 1
         return item
 
@@ -65,7 +75,10 @@ class CaseIterator(Object):
             raise StopIteration
         elif self.__cnt__ + 1 == self.__total__:
             return self.next()
-        return self.__reltype__(*(self.__args__.values())[self.__cnt__:])
+        if self.is_name_none is False:
+            raise TypeError("named class cannot get remains")
+        else:
+            return self.__reltype__(*self.__args__[self.__cnt__:])
 
 
     def __iter__(self):
@@ -75,9 +88,9 @@ class CaseIterator(Object):
     def __getitem__(self, key):
         if self.is_name_none and not isinstance(key, int):
             raise TypeError("key type error! expected [%s], but input is [%s]" % (int, type(key)))
-        if not self.__args__.has_key(key):
+        if not self.__names__.has_key(key):
             raise KeyError("no such key [%s]" % key)
-        return self.__args__[key]
+        return self.__args__[self.__names__[key]]
  
 
 def unpack(val, n):
@@ -102,13 +115,26 @@ def case(*names):
     wraps a class to make it a Case class and available for pattern matching
     '''
     def wrapper(cls, *args, **kwargs):
-        print cls, args, kwargs
         def init(self, *args):
             if len(names) == 0:
                 Case.__init__(self, None, *args)
             else:
                 Case.__init__(self, names, *args)
         cls.__init__ = init
+        for base in cls.__bases__:
+            if issubclass(base, Case):
+                return cls
         cls.__bases__ = (Case, ) + cls.__bases__
         return cls
     return wrapper
+
+
+def trait(cls):
+    '''
+    wraps a class to make it a Trait class
+    '''
+    for base in cls.__bases__:
+        if issubclass(base, Trait):
+            return cls
+    cls.__bases__ = (Trait, ) + cls.__bases__
+    return cls

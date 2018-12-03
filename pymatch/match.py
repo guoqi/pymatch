@@ -1,6 +1,7 @@
-#!/usr/local/bin/env python2
+#!/usr/bin/python2
 #coding: utf-8
-from base import Object
+from pymatch.base import Object
+
 
 class Match(Object):
     '''
@@ -16,3 +17,8 @@ class Match(Object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         pass
+
+
+    @property
+    def type(self):
+        return self.__type__

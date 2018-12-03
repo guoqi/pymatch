@@ -1,8 +1,8 @@
-#!/usr/local/env python2
+#!/usr/bin/python2
 #coding: utf-8
-from pymatch import case, Match, unpack, Object
+from pymatch import case, Match, unpack, Object, trait
 
-@case()
+@trait
 class Seq(Object): pass
 
 @case()
@@ -47,3 +47,7 @@ if __name__ == "__main__":
     tree = Branch(Leaf(1), Branch(Leaf(2), Leaf(3)))
     print tree.left
     print tree.right
+    (left, right) = unpack(tree, 2)
+    print left
+    print right
+    # s = Seq()
