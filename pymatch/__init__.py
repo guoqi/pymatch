@@ -3,3 +3,4 @@
 from pymatch.match import Match
 from pymatch.case import case, unpack, trait
 from pymatch.base import Object
+from pymatch.syntax import match

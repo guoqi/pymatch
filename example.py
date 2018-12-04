@@ -1,6 +1,6 @@
 #!/usr/bin/python2
 #coding: utf-8
-from pymatch import case, Match, unpack, Object, trait
+from pymatch import case, Match, match, Object, trait, unpack
 
 @trait
 class Seq(Object): pass
@@ -17,28 +17,25 @@ class Branch(Object): pass
 class Leaf(Object): pass
 
 
+@match
 def foo():
     print List.__bases__
     a = List(1, 2, 3, 4)
-    with Match(a) as t:
-        print List
-        print t
-        if t is int:
+    with Match(a):
+        with int:
             print "int"
-        elif t is str:
+        with str:
             print "str"
-        elif t is List:
-            (x, y, tail) = unpack(a, 3)
+        with List as (x, y, tail):
             print x, y, tail
-            with Match(tail) as t:
-                if t is int:
+            with Match(tail):
+                with int:
                     print "int"
-                if t is List:
-                    (z, w) = unpack(tail, 2)
+                with List as (z, w):
                     print z, w
-                else:
+                with _:
                     print "no match"
-        else:
+        with _:
             print "no match"
 
 

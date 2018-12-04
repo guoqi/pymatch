@@ -37,16 +37,26 @@ class TransformWith(ast.NodeTransformer):
             else:
                 <statement_5>
     '''
+    def check_match_begin(self, node):
+        '''
+        check whether node is ```with Match(a) [as t]``` or not
+        '''
+        if not isinstance(node, ast.With):
+            return False
+        if not isinstance(node.context_expr, ast.Call):
+            return False
+        if not isinstance(node.context_expr.func, ast.Name):
+            return False
+        if node.context_expr.func.id != "Match":
+            return False
+        return True
+
+
     def visit_With(self, node):
         '''
         visit with-context statement
         '''
-        print node
-        if not isinstance(node.context_expr, ast.Call):
-            return node
-        if not isinstance(node.context_expr.func, ast.Name):
-            return node
-        if node.context_expr.func.id != "Match":
+        if not self.check_match_begin(node):
             return node
         if node.optional_vars is None:
             node.optional_vars = self.do_with_match(node)
@@ -57,13 +67,17 @@ class TransformWith(ast.NodeTransformer):
             if not isinstance(stmt, ast.With):
                 alter_body.append(stmt)
                 continue
+            if self.check_match_begin(stmt):
+                alter_body.append(self.visit_With(stmt))
+                continue
             alter_stmt = self.do_with_case(var_name, node.context_expr, stmt, pre_sub_with_stmts)
-            if pre_sub_with_stmts is None:
-                pre_sub_with_stmts = [alter_stmt]
+            if isinstance(alter_stmt, list):
+                pre_sub_with_stmts = alter_stmt
             else:
-                pre_sub_with_stmts.append(alter_stmt)
-            alter_body.append(alter_stmt)
-        node.body = alter_body
+                pre_sub_with_stmts = [alter_stmt]
+        alter_body.extend(pre_sub_with_stmts)
+        node.body = alter_body[::-1]
+        ast.fix_missing_locations(node)
         return node
 
 
@@ -84,8 +98,13 @@ class TransformWith(ast.NodeTransformer):
                 ), 
                 inst=None, tback=None)
             ]
+        body = []
+        for stmt in node.body:
+            if self.check_match_begin(stmt):
+                body.append(self.visit_With(stmt))
+            else:
+                body.append(stmt)
         # convert to if-statement
-        body = node.body[:]
         if node.optional_vars is not None:
             if isinstance(node.optional_vars, ast.Tuple):
                 total = len(node.optional_vars.elts)
@@ -97,7 +116,7 @@ class TransformWith(ast.NodeTransformer):
             ctx_var = ctx_node.args[0].id
             import_stmt = ast.ImportFrom(module="pymatch", names=[ast.alias("unpack", None)], level=0)
             unpack_stmt = ast.Assign(
-                targets=list(node.optional_vars.elts), 
+                targets=[node.optional_vars], 
                 value=ast.Call(
                     func=ast.Name(id="unpack", ctx=ast.Load()), 
                     args=[ast.Name(id=ctx_var, ctx=ast.Load()), ast.Num(total)],
@@ -107,17 +126,20 @@ class TransformWith(ast.NodeTransformer):
                 )
             )
             body = [import_stmt, unpack_stmt] + body
-        return ast.If(
-            test = ast.Call(
-                func=ast.Name(id="issubclass", ctx=ast.Load()),
-                args=[ast.Name(id=ctx_id, ctx=ast.Load()), node.context_expr],
-                keywords=[],
-                starargs=None,
-                kwargs=None
-            ), 
-            body = body,
-            orelse = deepcopy(orelse)
-        )
+        if node.context_expr.id == "_":
+            return body
+        else:
+            return ast.If(
+                test = ast.Call(
+                    func=ast.Name(id="issubclass", ctx=ast.Load()),
+                    args=[ast.Name(id=ctx_id, ctx=ast.Load()), node.context_expr],
+                    keywords=[],
+                    starargs=None,
+                    kwargs=None
+                ), 
+                body = body,
+                orelse = deepcopy(orelse)
+            )
 
     
 class TransformFunctionDef(ast.NodeTransformer):
@@ -179,13 +201,14 @@ def match(func):
     '''
     Mark functions whose ast we need to rewrite for pattern matching
     '''
-    print func.__name__
     source = align_indent(inspect.getsource(func))
     tree = ast.parse(source)
     modified = chain_transform(tree, [TransformFunctionDef, TransformWith])
+    name = func.__name__
+    outer_env = func.__globals__
     def wrap(*args, **kwargs):
-        from test import unparse
-        unparse.Unparser(modified)
-        exec compile(modified, __file__, 'exec') in globals()
-        func(*args, **kwargs)
+        #from test import unparse
+        #unparse.Unparser(modified)
+        exec compile(modified, '', 'exec') in outer_env
+        return outer_env[name](*args, **kwargs)
     return wrap

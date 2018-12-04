@@ -49,16 +49,22 @@ class TestSyntax(object):
         )
         ctx_node = ast.Call(
             func = ast.Name(id="Match", ctx=ast.Load()),
-            args = [ast.Name(id="a", ctx=ast.Load())]
+            args = [ast.Name(id="a", ctx=ast.Load())],
+            keywords = [],
+            starargs = None, 
+            kwargs = None
         )
         expt = ast.If(
             test = ast.Call(
                 func=ast.Name(id="issubclass", ctx=ast.Load()),
-                args=[ast.Name(id="t", ctx=ast.Load()), ast.Name(id="int", ctx=ast.Load())]
+                args=[ast.Name(id="t", ctx=ast.Load()), ast.Name(id="int", ctx=ast.Load())],
+                keywords=[],
+                starargs=None, 
+                kwargs=None
             ),
             body = [ast.Print(values=ast.Str("int"))],
-            orelse = ast.Raise(type=ast.Call(func=ast.Name(id="SyntaxError", ctx=ast.Load()), args=[ast.Str("match nothing!")]), 
-                                inst=None, tback=None)
+            orelse = [ast.Raise(type=ast.Call(func=ast.Name(id="SyntaxError", ctx=ast.Load()), args=[ast.Str("match nothing!")], keywords=[], starargs=None, kwargs=None), 
+                                inst=None, tback=None)]
         )
         transformer = TransformWith()
         r = transformer.do_with_case("t", ctx_node, node, None)
@@ -88,28 +94,34 @@ class TestSyntax(object):
         )
         ctx_node = ast.Call(
             func = ast.Name(id="Match", ctx=ast.Load()),
-            args = [ast.Name(id="a", ctx=ast.Load())]
+            args = [ast.Name(id="a", ctx=ast.Load())],
         )
         expt = ast.If(
             test = ast.Call(
                 func=ast.Name(id="issubclass", ctx=ast.Load()),
-                args=[ast.Name(id="t", ctx=ast.Load()), ast.Name(id="List", ctx=ast.Load())]
+                args=[ast.Name(id="t", ctx=ast.Load()), ast.Name(id="List", ctx=ast.Load())],
+                keywords=[],
+                starargs=None,
+                kwargs=None
             ),
             body = [
-                ast.ImportFrom(module="pymatch", names=[ast.alias("unpack", None)]),
+                ast.ImportFrom(module="pymatch", names=[ast.alias("unpack", None)], level=0),
                 ast.Assign(
-                    targets=ast.Tuple(elts=[ast.Name(id="x", ctx=ast.Store()), ast.Name(id="y", ctx=ast.Store())], ctx=ast.Store()),
+                    targets=[ast.Tuple(elts=[ast.Name(id="x", ctx=ast.Store()), ast.Name(id="y", ctx=ast.Store())], ctx=ast.Store())],
                     value=ast.Call(
                         func=ast.Name(id="unpack", ctx=ast.Load()),
-                        args=[ast.Name(id="a", ctx=ast.Load()), ast.Num(2)]
+                        args=[ast.Name(id="a", ctx=ast.Load()), ast.Num(2)],
+                        keywords=[],
+                        starargs=None,
+                        kwargs=None
                     )
                 ), 
                 ast.Print(values=ast.Str("list"))
             ],
-            orelse = ast.Assign(ast.Name(id="a", ctx=ast.Store()), ast.Num(123))
+            orelse = [ast.Assign(ast.Name(id="a", ctx=ast.Store()), ast.Num(123))]
         )
         transformer = TransformWith()
-        r = transformer.do_with_case("t", ctx_node, node, ast.Assign(ast.Name(id="a", ctx=ast.Store()), ast.Num(123)))
+        r = transformer.do_with_case("t", ctx_node, node, [ast.Assign(ast.Name(id="a", ctx=ast.Store()), ast.Num(123))])
         assert ast.dump(expt) == ast.dump(r)
 
 
@@ -146,5 +158,6 @@ class TestSyntax(object):
                 with str:
                     return "str"
                 with List as (x, y, tail):
+                    print (x, y)
                     return (x, y)
         assert foo(List(1, 2, 3, 4)) == (1, 2)
