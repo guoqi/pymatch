@@ -75,6 +75,8 @@ class TestCase(object):
         assert right.value == 7
         (left, right) = unpack(left, 2)
         assert type(left) is Leaf
+        val = unpack(left, 1)
+        assert val == 123
         assert left.value == 123
         assert type(right) is Leaf
         assert right.value == "123"

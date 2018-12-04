@@ -71,6 +71,7 @@ class CaseIterator(Object):
 
 
     def tail(self):
+        print self.__cnt__, self.__total__
         if self.__cnt__ >= self.__total__:
             raise StopIteration
         elif self.__cnt__ + 1 == self.__total__:
@@ -106,7 +107,7 @@ def unpack(val, n):
             r.append(h)
             n -= 1
         r.append(it.tail())
-        return tuple(r)
+        return tuple(r) if len(r) > 1 else r[0]
     return _unpack(iter(val), n)
 
 

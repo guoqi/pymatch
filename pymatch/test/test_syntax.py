@@ -158,6 +158,7 @@ class TestSyntax(object):
                 with str:
                     return "str"
                 with List as (x, y, tail):
-                    print (x, y)
-                    return (x, y)
-        assert foo(List(1, 2, 3, 4)) == (1, 2)
+                    with Match(tail):
+                        with List as (z, w):
+                            return (x, y, z, w)
+        assert foo(List(1, 2, 3, 4)) == (1, 2, 3, 4)
